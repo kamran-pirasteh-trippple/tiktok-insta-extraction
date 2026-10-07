@@ -6,27 +6,24 @@ import re
 import sys
 import time
 import urllib.parse
-import urllib.request
 from typing import Optional
 
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
+import net
+
 
 def resolve_redirects(url: str) -> str:
     try:
-        req = urllib.request.Request(
-            url, method="HEAD", headers={"User-Agent": "Mozilla/5.0"}
-        )
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with net.urlopen(url, method="HEAD", timeout=5) as resp:
             return resp.geturl()
     except Exception:
         return url
 
 
 def fetch_subtitle(url: str) -> str:
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=10) as r:
+    with net.urlopen(url, timeout=10) as r:
         return r.read().decode("utf-8", errors="replace")
 
 
@@ -66,17 +63,7 @@ UNIVERSAL_DATA_RE = re.compile(
 def scrape_page_data(url: str) -> dict:
     """Pull stickers, suggested words, labels, and location from TikTok page HTML."""
     try:
-        req = urllib.request.Request(
-            url,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
-                )
-            },
-        )
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with net.urlopen(url, timeout=10) as r:
             html = r.read().decode("utf-8", errors="replace")
     except Exception:
         return {}
@@ -136,18 +123,7 @@ def fetch_comments(aweme_id: str, referer: str, count: int = 50) -> list[dict]:
     }
     url = "https://www.tiktok.com/api/comment/list/?" + urllib.parse.urlencode(params)
     try:
-        req = urllib.request.Request(
-            url,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
-                ),
-                "Referer": referer,
-            },
-        )
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with net.urlopen(url, referer=referer, timeout=10) as r:
             data = json.loads(r.read())
     except Exception:
         return []
@@ -180,13 +156,7 @@ def get_transcript(info: dict) -> Optional[str]:
 
 def extract(url: str) -> dict:
     canonical = resolve_redirects(url)
-    opts = {
-        "quiet": True,
-        "skip_download": True,
-        "no_warnings": True,
-        "writesubtitles": True,
-        "subtitleslangs": ["en", "eng-US"],
-    }
+    opts = net.ydl_opts(writesubtitles=True, subtitleslangs=["en", "eng-US"])
     with YoutubeDL(opts) as ydl:
         info = ydl.extract_info(canonical, download=False)
 

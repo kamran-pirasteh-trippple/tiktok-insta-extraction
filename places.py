@@ -1,9 +1,48 @@
 """Extract specific real-world places from caption + transcript using Claude."""
 
+import os
+import threading
 from typing import Literal, Optional
 
 from anthropic import Anthropic
 from pydantic import BaseModel, Field
+
+MODEL = "claude-haiku-4-5"
+
+_client: Optional[Anthropic] = None
+_client_lock = threading.Lock()
+
+
+def get_client() -> Anthropic:
+    """One Anthropic client for the whole process.
+
+    This used to be constructed inside every call, so each import paid a fresh
+    TLS handshake and got no connection reuse. The explicit timeout matters
+    under load: without it a stalled Claude call holds its concurrency slot
+    indefinitely.
+    """
+    global _client
+    if _client is None:
+        with _client_lock:
+            if _client is None:
+                _client = Anthropic(
+                    timeout=float(os.environ.get("EXTRACT_LLM_TIMEOUT_S") or 30),
+                    max_retries=2,
+                )
+    return _client
+
+
+def ping() -> None:
+    """Cheapest call that still proves the API key is accepted.
+
+    Called once at startup so a bad/rotated key surfaces on /health instead of
+    as an opaque 500 on every import.
+    """
+    get_client().messages.create(
+        model=MODEL,
+        max_tokens=1,
+        messages=[{"role": "user", "content": "."}],
+    )
 
 
 class Place(BaseModel):
@@ -52,8 +91,6 @@ def extract_places(
     suggested_words: Optional[list[str]] = None,
     location_created: Optional[str] = None,
 ) -> list[dict]:
-    client = Anthropic()
-
     parts = [
         f"Caption: {caption}",
         f"Hashtags: {', '.join(hashtags) if hashtags else '(none)'}",
@@ -65,8 +102,8 @@ def extract_places(
     ]
     user = "\n".join(parts)
 
-    response = client.messages.parse(
-        model="claude-haiku-4-5",
+    response = get_client().messages.parse(
+        model=MODEL,
         max_tokens=4096,
         system=SYSTEM,
         messages=[{"role": "user", "content": user}],

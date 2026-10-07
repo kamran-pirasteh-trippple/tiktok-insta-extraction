@@ -6,10 +6,10 @@ Claude prompt, just with no transcript signal.
 """
 
 import re
-import urllib.request
-from typing import Optional
 
 from yt_dlp import YoutubeDL
+
+import net
 
 
 INSTAGRAM_URL_RE = re.compile(
@@ -24,10 +24,7 @@ def is_instagram_url(url: str) -> bool:
 
 def resolve_redirects(url: str) -> str:
     try:
-        req = urllib.request.Request(
-            url, method="HEAD", headers={"User-Agent": "Mozilla/5.0"}
-        )
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with net.urlopen(url, method="HEAD", timeout=5) as resp:
             return resp.geturl()
     except Exception:
         return url
@@ -35,11 +32,7 @@ def resolve_redirects(url: str) -> str:
 
 def extract_instagram(url: str) -> dict:
     canonical = resolve_redirects(url)
-    opts = {
-        "quiet": True,
-        "skip_download": True,
-        "no_warnings": True,
-    }
+    opts = net.ydl_opts()
     with YoutubeDL(opts) as ydl:
         info = ydl.extract_info(canonical, download=False)
 
